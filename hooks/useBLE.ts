@@ -1,5 +1,5 @@
 /* eslint-disable no-bitwise */
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { PermissionsAndroid, Platform } from "react-native";
 import { Buffer } from "buffer";
 import crc from "crc-react-native";
@@ -17,21 +17,48 @@ import {
   Characteristic,
   Device,
 } from "react-native-ble-plx";
+import useStateWithCallback from "./useStateWithCallback";
 
 const DATA_SERVICE_UUID = "243c24bf-6615-461d-8cda-68d38b90b9b6";
 const CHARACTERISTIC_UUID_NOTIFY = "d6e3ae85-8366-4508-8136-71d12dbf8955";
 const CHARACTERISTIC_UUID_DATA = "869abea9-ea1f-40c6-a8a4-7f7861076456";
 
-const bleManager = new BleManager();
+export type bleCallback = {
+  oneTime: boolean;
+  id: string;
+  type: number;
+  func: (data: any) => void;
+};
 
+const bleManager = new BleManager();
+let revieceCallbacks: bleCallback[] = [];
 function useBLE() {
   const [allDevices, setAllDevices] = useState<Device[]>([]);
   const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
   const [color, setColor] = useState("white");
-  const [receivedData, setReceivedData] = useState<any>({});
-  const [notiviedData, setNotiviedData] = useState<number>(0);
+  const [receivedData, setReceivedData] = useState<{type: number, data: any}>({type:-1, data: null});
+  
 
+  // const [revieceCallbacks, setRevieceCallbacks] = useStateWithCallback<bleCallback[]>([]);
+  const [notiviedData, setNotiviedData] = useState<number>(0);
   const recievePackage = useRef<{type: number,checksum: number, len: number, id: string, memory: Buffer[]}>({type: -1, checksum:0, len: 0, id:"", memory:[]});
+  useEffect(() => {
+    console.log("callbacks changed");
+  }, [revieceCallbacks])
+  const tryCallbacks = (id: string, data: any) => {
+    let delCallback: string[] = [];
+    console.log("callback for")
+    for (let callback of revieceCallbacks) {
+      console.log("callback calling")
+      if (callback.id === id) {
+        callback.func(data);
+        if (callback.oneTime) {
+          delCallback.push(callback.id);
+        }
+      }
+    }
+    revieceCallbacks =  revieceCallbacks.filter((cb) =>!delCallback.includes(cb.id));
+  };
   const requestAndroid31Permissions = async () => {
     const bluetoothScanPermission = await PermissionsAndroid.request(
       PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
@@ -158,7 +185,10 @@ function useBLE() {
           // LIST SD CARD
           if(recievePackage.current.type === 0) {
             const decodedData = msgPack.decode(data);
-            setReceivedData(decodedData);
+            // setReceivedData(decodedData);
+            if(decodedData.Call_ID !== undefined) {
+              tryCallbacks(decodedData.Call_ID, decodedData);
+            }
           }
           // SMARTfloor data 
           else if (recievePackage.current.type === 4) {
@@ -342,12 +372,36 @@ function useBLE() {
     }
   };
 
-  let askForSDCard = async() => {
-    const value = base64.encode("getDATA")
-    connectedDevice?.writeCharacteristicWithoutResponseForService(DATA_SERVICE_UUID, CHARACTERISTIC_UUID_DATA, value, "");
+  let askForSDCard = async (callback: {oneTime: boolean,type:number , func: (datat: any) => void}) => {
+    const id = Math.floor(Math.random() * 100).toString();
+    const request = {...callback, id }
+    // const value = msgPack.encode(request.id).toString("base64");
+    const value = base64.encode(id +"|"+ callback.type);
+    console.log(`Message len ${value.length}`);
+    console.log(value);
+    console.log(`message: ${id}`);
+    // connectedDevice?.requestMTU(value.length).then(
+    //   (ret) => {
+        // console.log(`requested mtu ${ret?.mtu}`);
+        revieceCallbacks = [...revieceCallbacks, request];
+        connectedDevice?.writeCharacteristicWithoutResponseForService(DATA_SERVICE_UUID, CHARACTERISTIC_UUID_DATA, value, "");
+        console.log(connectedDevice?.mtu)
+    //   }
+    // ).catch((err) => console.log(err));
+    
   };
 
+  const sendCommand = (command: number, callback?:{oneTime: boolean, func: (datat: any) => void}) => {
+    const id = Math.floor(Math.random() * 100).toString();
+    if (callback) {
+      const request ={...callback, type: command, id};
+      revieceCallbacks = [...revieceCallbacks, request];
+    }
+    const value = msgPack.encode(id +"|"+ command).toString("base64");
+    connectedDevice?.writeCharacteristicWithoutResponseForService(DATA_SERVICE_UUID, CHARACTERISTIC_UUID_DATA, value, "");
+  }
   return {
+    sendCommand,
     askForSDCard,
     connectToDevice,
     disconnectDevice,
