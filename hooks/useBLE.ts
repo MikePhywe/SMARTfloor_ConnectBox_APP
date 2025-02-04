@@ -118,6 +118,7 @@ function useBLE() {
   const connectToDevice = async (device: Device) => {
     try {
       const deviceConnection = await bleManager.connectToDevice(device.id);
+      deviceConnection.requestMTU(512);
       setConnectedDevice(deviceConnection);
       await deviceConnection.discoverAllServicesAndCharacteristics();
       bleManager.stopDeviceScan();
@@ -391,14 +392,27 @@ function useBLE() {
     
   };
 
-  const sendCommand = (command: number, callback?:{oneTime: boolean, func: (datat: any) => void}) => {
+  const sendCommand = async (command: number, message: any ,callback?:{oneTime: boolean, func: (datat: any) => void}) => {
+    console.log("send Data called");
     const id = Math.floor(Math.random() * 100).toString();
     if (callback) {
       const request ={...callback, type: command, id};
       revieceCallbacks = [...revieceCallbacks, request];
     }
-    const value = msgPack.encode(id +"|"+ command).toString("base64");
-    connectedDevice?.writeCharacteristicWithoutResponseForService(DATA_SERVICE_UUID, CHARACTERISTIC_UUID_DATA, value, "");
+    const _Buffer = String.fromCharCode.apply(null, msgPack.encode({id, command: command.toString(), message}));// .toString("base64");
+    const value = base64.encode(_Buffer);//_Buffer.toString("base64");
+
+    console.log(`sending value : ${_Buffer}`);
+    try { 
+      // await bleManager.requestMTUForDevice(connectedDevice!.id, value.length);
+      console.log("sending Data");
+      connectedDevice?.writeCharacteristicWithoutResponseForService(DATA_SERVICE_UUID, CHARACTERISTIC_UUID_DATA, value, "");
+    }  
+    catch(e) {
+      console.error(`Ble error: ${e}`);
+      // connectedDevice?.writeCharacteristicWithoutResponseForService(DATA_SERVICE_UUID, CHARACTERISTIC_UUID_DATA, value, "");
+    };
+    // 
   }
   return {
     sendCommand,

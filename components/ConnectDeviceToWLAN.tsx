@@ -16,11 +16,11 @@ import WifiManager, { WifiEntry } from "react-native-wifi-reborn";
 
 type SetDeviceWLANProps = {
     visible: boolean;
-    closeModal: () => void;
+    closeModal: (passwd: string, wlan: WifiEntry | undefined) => void;
 };
 
-export const SetDeviceWlan: FC<SetDeviceWLANProps> = (props: {visible: boolean, closeModal: () => void}) => { 
-    const [selectedWifi, setSelectedWifi] = useState();
+export const SetDeviceWlan: FC<SetDeviceWLANProps> = (props) => { 
+    const [selectedWifi, setSelectedWifi] = useState<WifiEntry>();
     const [password, setPassword] = useState('');
     const [wlanList, setWlanList] = useState<WifiEntry[]>([]);
     const pickerRef = useRef(null);
@@ -45,6 +45,9 @@ export const SetDeviceWlan: FC<SetDeviceWLANProps> = (props: {visible: boolean, 
     useEffect( () =>{
         
         requestAndroidPermissions();
+        WifiManager.loadWifiList().then((list) => {
+            setWlanList(list);
+        })
         if(timer) clearInterval(timer);
         timer = setInterval(() => { 
                 WifiManager.loadWifiList().then((list) => {
@@ -57,11 +60,11 @@ export const SetDeviceWlan: FC<SetDeviceWLANProps> = (props: {visible: boolean, 
         <Modal visible={props.visible} animationType="slide" transparent={true}>
             <SafeAreaView style={modalStyle.modalContainer}>
                 {<Picker ref={pickerRef} selectedValue={selectedWifi} onValueChange={(itemValue, itemIndex) => setSelectedWifi(itemValue)}>
-                    { wlanList.map((item) => (<Picker.Item key={item.BSSID} label={item.SSID} value={item.SSID} />)) }                
+                    { wlanList.map((item) => (<Picker.Item key={item.BSSID} label={item.SSID} value={item} />)) }                
                 </Picker>}
                 <TextInput placeholder='Password' secureTextEntry={true} onChangeText={setPassword}/>
                         
-                <TouchableOpacity style={modalStyle.closeButton} onPress={props.closeModal}>
+                <TouchableOpacity style={modalStyle.closeButton} onPress={() => props.closeModal(password, selectedWifi)}>
                     <Text style={modalStyle.closeButtonText}>Schließen</Text>
                 </TouchableOpacity>
             </SafeAreaView>

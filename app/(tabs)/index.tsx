@@ -6,9 +6,11 @@ import DeviceModal from "@/components/DeviceConnectionModal";
 import FilesModal, { fileItemListProperties } from "@/components/ViewFiles";
 import useBLE, { bleCallback } from "@/hooks/useBLE";
 import SetDeviceWlan from '@/components/ConnectDeviceToWLAN';
+import { WifiEntry } from 'react-native-wifi-reborn';
  
 export default function TabOneScreen() {
   const {
+    sendCommand,
     askForSDCard,
     allDevices,
     connectedDevice,
@@ -59,10 +61,14 @@ export default function TabOneScreen() {
             <Text>Verbunden mit: {connectedDevice.name}</Text>
             {/* <Text>Empfangene Daten: {[...receivedData.data]}</Text> */}
             <Text>Nachriten Daten: {notiviedData}</Text>
+            <View style={styles.buttonContainer}>
             <Button title="Trennen" onPress={disconnectDevice} />
             <Button title= "conect device to wlan" onPress={() => { 
               setIsWLANVisible(true);
             }}/>
+            <Button title="user credentials löschen" onPress={() => {
+              sendCommand(6, {});
+            }} />
             <Button title="sdCard directories" onPress={
               () => {
                 const callback = (data: any) => {
@@ -89,19 +95,19 @@ export default function TabOneScreen() {
                   />)
                 };
                 
-                askForSDCard({oneTime:true,type:0, func: callback});
+                // askForSDCard({oneTime:true,type:0, func: callback});
+                sendCommand(0,"/", {oneTime:true, func: callback})
               }
               
             }/>
-            {FilesModalS}
+            </View>
+            
             
           </>
         ): (
           <>
             <Button title="Connect" onPress={openModal} />
-            <Button title= "conect device to wlan" onPress={() => { 
-              setIsWLANVisible(true);
-            }}/>
+            
             <DeviceModal
               closeModal={hideModal}
               visible={isModalVisible}
@@ -110,8 +116,16 @@ export default function TabOneScreen() {
             />
             
           </>) 
-}
-<SetDeviceWlan visible={isWLANVisible} closeModal={() => setIsWLANVisible(false)}/>
+          }
+      <SetDeviceWlan visible={isWLANVisible} closeModal={(passwd: string, wlan: WifiEntry | undefined) => {
+        console.log("wlan callback");
+        if(wlan) {
+          sendCommand(5, {...wlan, passwd});
+        }
+        setIsWLANVisible(false)
+      
+      }}/>
+      {FilesModalS}
       <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
       <EditScreenInfo path="app/(tabs)/index.tsx" />
     </View>
@@ -123,6 +137,11 @@ const styles = StyleSheet.create({
     // flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  buttonContainer: {
+    height: "50%",
+    padding: 10,
+    justifyContent: 'space-around',
   },
   title: {
     fontSize: 20,
