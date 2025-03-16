@@ -1,95 +1,164 @@
-import { Button, PermissionsAndroid, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import RNFS, { ReadDirItem } from 'react-native-fs';
 import * as FileSystem from 'expo-file-system';
-import { Directory, File, Paths } from 'expo-file-system/next';
-import EditScreenInfo from '@/components/EditScreenInfo';
-import { Text, View } from '@/components/Themed';
-import { useEffect, useState } from 'react';
-import { Picker } from '@react-native-picker/picker';
+import  ManageExternalStorage  from 'react-native-external-storage-permission';
 
-function printDirectory(directory: Directory, indent: number = 0) {
-  // askPermissions();
-  console.log(`${' '.repeat(indent)} + ${directory.name}`);
-  const contents = directory.list();
-  for (const item of contents) {
-    if (item instanceof Directory) {
-      printDirectory(item, indent + 2);
-    } else {
-      console.log(`${' '.repeat(indent + 2)} - ${item.name} (${item.size} bytes)`);
-    }
-  }
-}
 
-const askPermissions = async function () {
-  const albumUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot("/Documents");
-  const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(albumUri);
-  if (permissions.granted) {
-    console.log('Permissions granted');
-  } else {
-    console.log('Permissions denied');
-  }
+// Interface für Datei-Items
+interface FileItem {
+  name: string;
+  path: string;
+  size: number;
+  isDirectory: boolean;
+  type: string;
 }
 
 export default function TabTwoScreen() {
-  const [permissions, setPermissions] = useState(false);
-   const [selectedWifi, setSelectedWifi] = useState();
-  const test = async () => {
-    try {
+  // State-Variablen
+  const [files, setFiles] = useState<FileItem[]>([]); // Liste der Dateien im aktuellen Verzeichnis
+  const [currentDirectory, setCurrentDirectory] = useState<string>(RNFS.ExternalStorageDirectoryPath + '/Download'); // Aktuelles Verzeichnis
+  const [loading, setLoading] = useState<boolean>(true); // Ladezustand
+useEffect(() => {
+  ManageExternalStorage.checkAndGrantPermission().then((result: any)=> { 
+    if (result) {
+      console.log("permission granted")
+  } else {
+      // fail
+      console.log("permission not granted")
       
-      // askPermissions();
-      // const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-      // console.log(`path: ${FileSystem.StorageAccessFramework.getUriForDirectoryInRoot()}`);	
-      const file = new File("storage/emulated/0/Documents", 'Example.txt');
-      const fileUri = FileSystem.documentDirectory + 'Example.txt';
-      const content = await FileSystem.readAsStringAsync(file.uri);
-      console.log(content);
+  }
+
+  });
+}, [])
+  /**
+   * Lädt die Dateien und Ordner eines bestimmten Verzeichnisses
+   * @param directoryPath Der Pfad des zu ladenden Verzeichnisses
+   */
+  const loadFiles = async (directoryPath: string) => {
+    setLoading(true);
+    try {
+      // Liest den Inhalt des Verzeichnisses
+      const files: ReadDirItem[] = await RNFS.readDir(directoryPath);
+      console.log("All files", files); // Logge alle Files
+      // Konvertiert die Dateiliste in ein Array von FileItem-Objekten
+      const fileItems: FileItem[] = await Promise.all(files.map(async (file) => {
+        console.log("Single File", file); // Logge ein File
+        let fileType = ""; // Standardwert für Ordner
+        let fileSize = 0;
+        
+        if (!file.isDirectory()) {
+          fileType = file.name.split('.').pop() ?? '';
+          fileSize = file.size;
+        } else {
+            const stats = await RNFS.stat(file.path);
+            fileSize = stats.size;
+        }
+        console.log("filetype", fileType);
+        return {
+          name: file.name,
+          path: file.path,
+          size: fileSize,
+          isDirectory: file.isDirectory(),
+          type: fileType, // Dateiendung als Typ extrahieren
+        }
+      }));
+      console.log("fileItems", fileItems); // Logge alle FileItems
+      setFiles(fileItems);
+      setCurrentDirectory(directoryPath);
     } catch (error) {
-      console.error(error);
-  }}
+      console.error('Error reading directory:', error);
+      Alert.alert('Error', 'Could not read directory.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Navigiert zum übergeordneten Verzeichnis
+   */
+  const goBack = () => {
+    if (currentDirectory !== RNFS.ExternalStorageDirectoryPath + '/Download') {
+      const parentDirectory = currentDirectory.substring(0, currentDirectory.lastIndexOf('/'));
+      loadFiles(parentDirectory);
+    }
+  };
+
+  /**
+   * Öffnet ein Verzeichnis und lädt dessen Inhalt
+   * @param path Der Pfad des zu öffnenden Verzeichnisses
+   */
+  const openDirectory = (path: string) => {
+    loadFiles(path);
+  };
+
+  // Lädt die Dateien des Download-Verzeichnisses beim ersten Rendern
   useEffect(() => {
-    PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-      {
-        title: "Files System Permission",
-        message: "Local storage",
-        buttonPositive: "OK",
-      }
-    ).then((answere) => {
-      setPermissions(answere === 'granted');
-      console.log(answere); // askPermissions result
-    });
-    
-  },[]);
+    loadFiles(RNFS.ExternalStorageDirectoryPath + '/Download');
+  }, []);
+
+  /**
+   * Rendert ein einzelnes Element in der Dateiliste
+   * @param item Das FileItem-Objekt
+   */
+  const renderItem = ({ item }: { item: FileItem }) => (
+    <TouchableOpacity
+      onPress={() => {
+        if (item.isDirectory) {
+          openDirectory(item.path);
+        } else {
+          Alert.alert('File', `Opening file: ${item.name}`);
+        }
+      }}
+      style={styles.fileItem}
+    >
+      <Text>{item.isDirectory ? '📁 ' : '📄 '}{item.name}</Text>
+      <Text>Size: {item.size} bytes, Type: {item.type}</Text>
+    </TouchableOpacity>
+  );
+
+  // UI rendering
   return (
     <View style={styles.container}>
-      <Picker selectedValue={selectedWifi} onValueChange={(itemValue, itemIndex) => setSelectedWifi(itemValue)}>
-                    {/* { wlanList.map((item) => (<Picker.Item label={item.SSID} value={item.SSID} />)) }                 */}
-                    <Picker.Item label="Java" value="java" />
-                    <Picker.Item label="JavaScript" value="js" />
-                </Picker>
-      <Text style={styles.title}>Tab Two</Text>
-      <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
-      <EditScreenInfo path="app/(tabs)/two.tsx" />
-      <Button title='file' onPress={test}/>
-      <Button title='directory' onPress={async () => {
-        const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync("/storage/emulated/0/Documents");
-        printDirectory(new Directory("/storage/emulated/0/Documents")?? Paths.cache)}}/>
+      <Text style={styles.title}>Local Files</Text>
+      {/* "Zurück"-Button, nur anzeigen, wenn wir nicht im Download-Verzeichnis sind */}
+      {currentDirectory !== RNFS.ExternalStorageDirectoryPath + '/Download' && (
+        <TouchableOpacity onPress={goBack} style={styles.goBackButton}>
+          <Text>Back</Text>
+        </TouchableOpacity>
+      )}
+      {/* Ladeanzeige */}
+      {loading && <Text>Loading files...</Text>}
+      {/* Dateiliste */}
+      <FlatList
+        data={files}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.path}
+      />
     </View>
   );
 }
 
+// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 20,
   },
   title: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
+    marginBottom: 20,
   },
-  separator: {
-    marginVertical: 30,
-    height: 1,
-    width: '80%',
+  fileItem: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+  },
+  goBackButton: {
+    backgroundColor: '#ddd',
+    padding: 10,
+    marginBottom: 10,
+    alignSelf: 'flex-start'
   },
 });

@@ -2,6 +2,7 @@ import React from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Link, Tabs } from 'expo-router';
 import { Pressable } from 'react-native';
+import { Entypo } from '@expo/vector-icons'; // Icon importieren
 
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -22,14 +23,14 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        // Disable the static render of the header on web
-        // to prevent a hydration error in React Navigation v6.
+        tabBarInactiveTintColor: Colors[colorScheme ?? 'light'].tabIconDefault, // Inaktive Farbe setzen
         headerShown: useClientOnlyValue(false, true),
       }}>
-      <Tabs.Screen
+      {/* ... bestehende Tabs ... */}
+        <Tabs.Screen
         name="index"
         options={{
-          title: 'Tab One',
+          title: 'Device',
           tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
           headerRight: () => (
             <Link href="/modal" asChild>
@@ -51,14 +52,21 @@ export default function TabLayout() {
         name="two"
         options={{
           title: 'local files',
-          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
+          tabBarIcon: ({ color }) => <TabBarIcon name="folder-open" color={color} />,
         }}
       />
       <Tabs.Screen
         name="three"
         options={{
-          title: 'Tab Three',
-          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
+          title: 'Wifi',
+          tabBarIcon: ({ color }) => <TabBarIcon name="wifi" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="four" // Name des neuen Tabs
+        options={{
+          title: 'Color', // Titel des Tabs
+          tabBarIcon: ({ color }) => <Entypo name="colours" size={24} color={color} />, // Icon für den Tab
         }}
       />
     </Tabs>

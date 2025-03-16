@@ -35,9 +35,9 @@ export const FileItem: FC<FileItemProps> = ({ item, onPress }) => {
     
     return (
         <TouchableOpacity onPress={handlePress} style={modalStyle.File}>
+            <Text>{item.item.type === 'folder' ? '📁 ' : '📄 '}</Text>
             <Text>{item.item.title}</Text>
             <Text>{item.item.size} bytes</Text>
-            <Text>{item.item.type}</Text>
         </TouchableOpacity>
     )
 }
@@ -105,7 +105,7 @@ const modalStyle = StyleSheet.create({
         borderBottomWidth: 1,
         borderColor: '#ccc',
         borderWidth: 1,
-        marginVertical: 2
+        marginVertical: 1
     }
 });
 

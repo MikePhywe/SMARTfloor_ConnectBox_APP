@@ -18,6 +18,9 @@ import {
   Device,
 } from "react-native-ble-plx";
 import useStateWithCallback from "./useStateWithCallback";
+import { Communication } from "@/constants/bleTypes";
+import { BLEContextProps } from "@/contexts/BLEContext";
+import ApiManager from "@/components/ApiManager";
 
 const DATA_SERVICE_UUID = "243c24bf-6615-461d-8cda-68d38b90b9b6";
 const CHARACTERISTIC_UUID_NOTIFY = "d6e3ae85-8366-4508-8136-71d12dbf8955";
@@ -25,26 +28,28 @@ const CHARACTERISTIC_UUID_DATA = "869abea9-ea1f-40c6-a8a4-7f7861076456";
 
 export type bleCallback = {
   oneTime: boolean;
-  id: string;
-  type: number;
+  
+  type: Communication.BLE_COMMANDS;
   func: (data: any) => void;
 };
 
 const bleManager = new BleManager();
-let revieceCallbacks: bleCallback[] = [];
-function useBLE() {
+let revieceCallbacks: (bleCallback & { id: string})[] = [];
+export default function useBLE(): BLEContextProps {
   const [allDevices, setAllDevices] = useState<Device[]>([]);
   const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
-  const [color, setColor] = useState("white");
-  const [receivedData, setReceivedData] = useState<{type: number, data: any}>({type:-1, data: null});
+  
+  const [receivedData, setReceivedData] = useState<{type: Communication.BLE_COMMANDS, data: any}>({type: Communication.BLE_COMMANDS.ERROR_MESSAGE, data: null});
   
 
   // const [revieceCallbacks, setRevieceCallbacks] = useStateWithCallback<bleCallback[]>([]);
   const [notiviedData, setNotiviedData] = useState<number>(0);
-  const recievePackage = useRef<{type: number,checksum: number, len: number, id: string, memory: Buffer[]}>({type: -1, checksum:0, len: 0, id:"", memory:[]});
+  const recievePackage = useRef<{type: Communication.BLE_COMMANDS ,checksum: number, len: number, id: string, memory: Buffer[]}>({type: Communication.BLE_COMMANDS.ERROR_MESSAGE, checksum:0, len: 0, id:"", memory:[]});
+  
   useEffect(() => {
     console.log("callbacks changed");
   }, [revieceCallbacks])
+
   const tryCallbacks = (id: string, data: any) => {
     let delCallback: string[] = [];
     console.log("callback for")
@@ -59,6 +64,7 @@ function useBLE() {
     }
     revieceCallbacks =  revieceCallbacks.filter((cb) =>!delCallback.includes(cb.id));
   };
+
   const requestAndroid31Permissions = async () => {
     const bluetoothScanPermission = await PermissionsAndroid.request(
       PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
@@ -179,28 +185,60 @@ function useBLE() {
           const data = Buffer.concat([...recievePackage.current.memory])
           const checksum = crc.crc32(data);
           if (checksum != recievePackage.current.checksum) {
-            recievePackage.current = {checksum:0, len: 0, id:"", memory:[], type:-1};
+            recievePackage.current = {checksum:0, len: 0, id:"", memory:[], type:Communication.BLE_COMMANDS.ERROR_MESSAGE};
             return;
             // throw new Error("wrong checksum in data");
           }
           // LIST SD CARD
-          if(recievePackage.current.type === 0) {
-            const decodedData = msgPack.decode(data);
-            // setReceivedData(decodedData);
-            if(decodedData.Call_ID !== undefined) {
-              tryCallbacks(decodedData.Call_ID, decodedData);
-            }
+          let decodedData;
+          switch (recievePackage.current.type) {
+            case Communication.BLE_COMMANDS.GET_SD_FILESYSTEM:
+              decodedData = msgPack.decode(data);
+              if(decodedData.Call_ID !== undefined) {
+                tryCallbacks(decodedData.Call_ID, decodedData);
+              }
+              break;
+            case Communication.BLE_COMMANDS.SET_VOLTAGE_PORT:
+              decodedData = msgPack.decode(data);
+              
+              tryCallbacks("plateinfopage", decodedData);
+              
+              break;
+            case Communication.BLE_COMMANDS.SEND_SMARTFLOOR_DATA:
+              decodedData = msgPack.decode(data);
+              setReceivedData(decodedData);
+              break;
+
+            case Communication.BLE_COMMANDS.SEND_WIFI_DATA:
+              const {ip, ssid} = msgPack.decode(data);
+              ApiManager.getInstance(ip);
+              break;
+
+            default:
+              console.log('Recived BLECommand not implemented');
+              console.log(`${checksum} vs ${recievePackage.current.checksum}`);
+              console.log(msgPack.decode(data));
+              console.log(recievePackage.current);
+              break;
           }
+          // if(recievePackage.current.type === Communication.BLE_COMMANDS.GET_SD_FILESYSTEM) {
+          //   const decodedData = msgPack.decode(data);
+          //   // setReceivedData(decodedData);
+          //   if(decodedData.Call_ID !== undefined) {
+          //     tryCallbacks(decodedData.Call_ID, decodedData);
+          //   }
+          // }
           // SMARTfloor data 
-          else if (recievePackage.current.type === 4) {
-            const decodedData = msgPack.decode(data);
-            setReceivedData(decodedData);
-          }
+          // else if (recievePackage.current.type === Communication.BLE_COMMANDS.SEND_SMARTFLOOR_DATA) {
+          //   const decodedData = msgPack.decode(data);
+          //   setReceivedData(decodedData);
+          // } else if (recievePackage.current.type === Communication.BLE_COMMANDS.SEND_WIFI_DATA) {
+          //   const {ip, ssid} = msgPack.decode(data);
+          //   ApiManager.getInstance(ip);
+          // }
 
-          console.log(`${checksum} vs ${recievePackage.current.checksum}`);
-          console.log(msgPack.decode(data));
-
-          recievePackage.current = {checksum:0, len: 0, id:"", memory:[], type:-1};
+          
+          recievePackage.current = {checksum:0, len: 0, id:"", memory:[], type:Communication.BLE_COMMANDS.ERROR_MESSAGE};
         }
         
         // if(recievePackage.current.memory.length === recievePackage.current.len) {
@@ -220,7 +258,7 @@ function useBLE() {
       // const firstRec = base64.decode(characteristic.value);
       // let recived = JSON.parse(firstRec);
     } catch (err) {
-      recievePackage.current = {type:-1, checksum:0, len: 0, id:"", memory:[]};
+      recievePackage.current = {type:Communication.BLE_COMMANDS.ERROR_MESSAGE, checksum:0, len: 0, id:"", memory:[]};
       console.log(err);
     }
     
@@ -373,7 +411,7 @@ function useBLE() {
     }
   };
 
-  let askForSDCard = async (callback: {oneTime: boolean,type:number , func: (datat: any) => void}) => {
+  let askForSDCard = async (callback: {oneTime: boolean, type:number , func: (datat: any) => void}) => {
     const id = Math.floor(Math.random() * 100).toString();
     const request = {...callback, id }
     // const value = msgPack.encode(request.id).toString("base64");
@@ -392,14 +430,19 @@ function useBLE() {
     
   };
 
-  const sendCommand = async (command: number, message: any ,callback?:{oneTime: boolean, func: (datat: any) => void}) => {
+  const registerCallback = ( callback: bleCallback & {id: string}) => {
+    revieceCallbacks = [...revieceCallbacks, callback];
+
+  }
+
+  const sendCommand = async (command: Communication.BLE_COMMANDS.ERROR_MESSAGE, message: any ,callback?:{oneTime: boolean, func: (datat: any) => void}) => {
     console.log("send Data called");
     const id = Math.floor(Math.random() * 100).toString();
     if (callback) {
       const request ={...callback, type: command, id};
       revieceCallbacks = [...revieceCallbacks, request];
     }
-    const _Buffer = String.fromCharCode.apply(null, msgPack.encode({id, command: command.toString(), message}));// .toString("base64");
+    const _Buffer = String.fromCharCode.apply(null, msgPack.encode({id, command: command.toString(), message}) as any);// .toString("base64");
     const value = base64.encode(_Buffer);//_Buffer.toString("base64");
 
     console.log(`sending value : ${_Buffer}`);
@@ -421,13 +464,13 @@ function useBLE() {
     disconnectDevice,
     allDevices,
     connectedDevice,
-    color,
     receivedData,
     notiviedData,
+    registerCallback,
     requestPermissions,
     scanForPeripherals,
-    startStreamingData,
+    // startStreamingData,
   };
 }
 
-export default useBLE;
+// export default useBLE;

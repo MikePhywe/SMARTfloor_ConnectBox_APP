@@ -1,10 +1,12 @@
 import 'react-native-reanimated';
+import 'react-native-get-random-values';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
+import { BLEProvider } from '@/contexts/BLEContext';
 
 
 import { useColorScheme } from '@/components/useColorScheme';
@@ -51,10 +53,11 @@ function RootLayoutNav() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+       <BLEProvider>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
+      </Stack></BLEProvider>
     </ThemeProvider>
   );
 }
