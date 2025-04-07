@@ -13,6 +13,7 @@ export namespace Communication {
     SET_LED_COLOR = 8,
     FIRMWARE_UPDATE = 9,
     SET_VOLTAGE_PORT = 10,
+    LOG_DATA = 11,
     ERROR_MESSAGE = 255,
   }
 

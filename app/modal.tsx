@@ -30,9 +30,11 @@ export default function ModalScreen() {
     })));
   
   const {
-      registerCallback
+      registerCallback,
+      sendCommand
     } = useBLEContext();
   useEffect(() => {
+
     registerCallback( {
       type: Communication.BLE_COMMANDS.SET_VOLTAGE_PORT,
       oneTime: false, 
@@ -40,11 +42,54 @@ export default function ModalScreen() {
       func: (data: any) => {
         console.log("got data in callback function Modalscreen");
         console.log(data);
-        setPuzzleFields(prevFields => { 
-          prevFields[data.platenumber-1].visible = data.connected;
-          return [...prevFields];
-        });
+        if(data.platenumber !== undefined) {
+          setPuzzleFields(prevFields => { 
+            prevFields[data.platenumber-1].visible = data.connected;
+            return [...prevFields];
+          });
+        } else {
+          setPuzzleFields(prevFields => {
+            Object.keys(data).every((key, index) => {
+              index-=1;
+              if(index < 0) {
+                index=5;
+              }
+              prevFields[index].visible = data[key];
+              return true;
+            })
+            return [...prevFields];
+          })
+          
+        }
+        
       }})
+      sendCommand(Communication.BLE_COMMANDS.SET_VOLTAGE_PORT,{},{
+        type: Communication.BLE_COMMANDS.SET_VOLTAGE_PORT,
+        oneTime: true, 
+        func: (data: any) => {
+          console.log("got data in callback function Modalscreen");
+          console.log(data);
+          if(data.platenumber !== undefined) {
+            setPuzzleFields(prevFields => { 
+              prevFields[data.platenumber-1].visible = data.connected;
+              return [...prevFields];
+            });
+          } else {
+            setPuzzleFields(prevFields => {
+              Object.keys(data).every((key, index) => {
+                index-=1;
+                if(index < 0) {
+                  index=5;
+                }
+                prevFields[index].visible = data[key];
+                return true;
+              })
+              return [...prevFields];
+            })
+            
+          }
+          
+        }})
   }, []);
   // Funktion zum Berechnen der Positionen
   const calculatePuzzlePositions = (centerWidth: number, index: number) => {

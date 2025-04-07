@@ -213,6 +213,11 @@ export default function useBLE(): BLEContextProps {
               const {ip, ssid} = msgPack.decode(data);
               ApiManager.getInstance(ip);
               break;
+            
+            case Communication.BLE_COMMANDS.LOG_DATA:
+              console.log(msgPack.decode(data));
+              break;
+              
 
             default:
               console.log('Recived BLECommand not implemented');
