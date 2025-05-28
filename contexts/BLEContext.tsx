@@ -1,9 +1,10 @@
 import React, { createContext, useContext } from 'react';
 import useBLE, { bleCallback } from '@/hooks/useBLE'; // Importiere useBLE aus deinem Hook-Verzeichnis
+import { Communication } from '@/constants/bleTypes';
 
 // Erstelle den BLE-Kontext
 export interface BLEContextProps {
-  sendCommand: (command: number, params: any, bleCallback?: bleCallback) => void;
+  sendCommand: (command: Communication.BLE_COMMANDS, params: any, bleCallback?: bleCallback) => void;
   askForSDCard: (callback: {oneTime: boolean, type:number , func: (datat: any) => void}) => void;
   allDevices: any[];
   connectedDevice: any;

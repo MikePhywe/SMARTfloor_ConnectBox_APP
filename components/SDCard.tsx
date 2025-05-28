@@ -34,7 +34,7 @@ interface FileItem {
 interface SdCardModalProps {
   isVisible: boolean;
   onClose: () => void;
-  espIp: string;
+  espIp?: string;
 }
 
 const SdCardModal: React.FC<SdCardModalProps> = ({ isVisible, onClose, espIp }) => {
@@ -59,7 +59,7 @@ const SdCardModal: React.FC<SdCardModalProps> = ({ isVisible, onClose, espIp }) 
   const [uploadFileProgress, setUploadFileProgress] = useState<number>(0);
   const [isUploadFileProgress, setIsUploadFileProgress] = useState<boolean>(false);
   //const [ip, setIp] = useState<string>(espIp);
-  const apiManager = ApiManager.getInstance(); // Hole die Singleton-Instanz mit der IP
+  const apiManager = ApiManager.getInstance(espIp); // Hole die Singleton-Instanz mit der IP
 
 
   // useEffect(() => {

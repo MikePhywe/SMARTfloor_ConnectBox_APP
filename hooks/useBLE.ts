@@ -29,7 +29,7 @@ const CHARACTERISTIC_UUID_DATA = "869abea9-ea1f-40c6-a8a4-7f7861076456";
 export type bleCallback = {
   oneTime: boolean;
   
-  type: Communication.BLE_COMMANDS;
+  type?: Communication.BLE_COMMANDS;
   func: (data: any) => void;
 };
 
@@ -49,6 +49,27 @@ export default function useBLE(): BLEContextProps {
   useEffect(() => {
     console.log("callbacks changed");
   }, [revieceCallbacks])
+// Ref, um den vorherigen Verbindungsstatus zu speichern
+  const prevConnectedDeviceRef = useRef<Device | null>(null);
+
+  useEffect(() => {
+    if (connectedDevice && !prevConnectedDeviceRef.current) {
+      // Gerät wurde gerade verbunden
+      console.log(
+        "Bluetooth-Gerät verbunden:",
+        connectedDevice.name || connectedDevice.id
+      );
+      
+      sendCommand(Communication.BLE_COMMANDS.GET_WLAN_DATA, {}, { // Ersetze GET_DEVICE_INFO mit deinem Befehl
+        oneTime: true,
+        func: (deviceInfo) => {
+          console.log("Geräteinformationen nach Verbindung:", deviceInfo);
+        }
+      });
+    }
+    // Aktualisiere den Ref für den nächsten Render
+    prevConnectedDeviceRef.current = connectedDevice;
+  }, [connectedDevice]); // Abhängigkeit: connectedDevice. sendCommand ggf. hinzufügen, wenn es im Effekt genutzt wird.
 
   const tryCallbacks = (id: string, data: any) => {
     let delCallback: string[] = [];
@@ -209,8 +230,9 @@ export default function useBLE(): BLEContextProps {
               setReceivedData(decodedData);
               break;
 
-            case Communication.BLE_COMMANDS.SEND_WIFI_DATA:
-              const {ip, ssid} = msgPack.decode(data);
+            case Communication.BLE_COMMANDS.SEND_WIFI_DATA: 
+            case Communication.BLE_COMMANDS.GET_WLAN_DATA:
+              const {ip, ssid, level, channel} = msgPack.decode(data);
               ApiManager.getInstance(ip);
               break;
             
@@ -220,6 +242,11 @@ export default function useBLE(): BLEContextProps {
               
 
             default:
+              decodedData = msgPack.decode(data);
+              if(decodedData.Call_ID !== undefined) {
+                tryCallbacks(decodedData.Call_ID, decodedData);
+                break;
+              }
               console.log('Recived BLECommand not implemented');
               console.log(`${checksum} vs ${recievePackage.current.checksum}`);
               console.log(msgPack.decode(data));
@@ -440,7 +467,7 @@ export default function useBLE(): BLEContextProps {
 
   }
 
-  const sendCommand = async (command: Communication.BLE_COMMANDS.ERROR_MESSAGE, message: any ,callback?:{oneTime: boolean, func: (datat: any) => void}) => {
+  const sendCommand = async (command: Communication.BLE_COMMANDS, message: any ,callback?:{oneTime: boolean, func: (datat: any) => void}) => {
     console.log("send Data called");
     const id = Math.floor(Math.random() * 100).toString();
     if (callback) {

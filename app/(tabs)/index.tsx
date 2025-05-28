@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 // import SDCardManager from '@/components/SDCard';
 import SdCardModal from '@/components/SDCard';
 import { useBLEContext } from "@/contexts/BLEContext";
+import { Communication } from '@/constants/bleTypes';
 
 
 // Interface for modal Items
@@ -125,7 +126,6 @@ export default function TabOneScreen() {
       <SdCardModal
         onClose={() => setFilesModalS(null)}
         isVisible={true}
-        espIp='192.168.178.188'
       />
     );
   }
@@ -146,7 +146,7 @@ export default function TabOneScreen() {
           <View style={styles.buttonContainer}>
             <Button title="Disconnect" onPress={disconnectDevice} />
             <Button title="Connect to WLAN" onPress={() => setIsWLANVisible(true)} />
-            <Button title="Clear User Credentials" onPress={() => sendCommand(6, {})} />
+            <Button title="Clear User Credentials" onPress={() => sendCommand(Communication.BLE_COMMANDS.RESET_USER_DATA, {})} />
             <Button title="SD Card Directories" onPress={openSDCardFilesModal} />
             <Button title="WEBsocket SD Card" onPress={openWebSdCard}/>
           </View>
@@ -169,11 +169,13 @@ export default function TabOneScreen() {
       <SetDeviceWlan
         visible={isWLANVisible}
         closeModal={(passwd: string, wlan: WifiEntry | undefined) => {
+          setIsWLANVisible(false); // Modal immer schließen
           if (wlan) {
-            sendCommand(5, { ...wlan, passwd });
+            // Annahme: SET_WIFI_CREDENTIALS ist der Befehlscode zum Setzen der WLAN-Daten
+            sendCommand(Communication.BLE_COMMANDS.SET_WLAN_CREDENTIALS, { ...wlan, passwd });
           }
-          setIsWLANVisible(false);
         }}
+       
       />
       {/* Show SD card files modal */}
       {FilesModalS}

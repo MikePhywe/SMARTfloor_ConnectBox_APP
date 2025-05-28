@@ -44,7 +44,9 @@ class ApiManager {
     } else if (ip && ApiManager.instance.ip !== ip) {
       // Hier könnte man die IP aktualisieren, falls sie sich ändert.
       // Für dieses Beispiel werfen wir einen Fehler, wenn die IP sich ändert.
-      throw new Error("IP address cannot be changed after ApiManager has been initialized.");
+      // throw new Error("IP address cannot be changed after ApiManager has been initialized.");
+      console.log(`change IP from ${ApiManager.instance.ip} to ${ip}}`);
+      ApiManager.instance.ip = ip;
     }
     return ApiManager.instance;
   }
