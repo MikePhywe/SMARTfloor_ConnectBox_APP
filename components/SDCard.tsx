@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,17 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import ApiManager, { ApiManagerProgressEvent } from '@/components/ApiManager'; 
 
+
+interface UploadFileOptions {
+  espIp: string;
+  endpoint: string;
+  fileTypeFilter?: string; // z.B. 'application/octet-stream' für .bin, oder '*/*' für alle
+  fileFieldName: string; // Name des Feldes für die Datei im Multipart-Request
+  additionalFormData?: { [key: string]: string }; // Zusätzliche Formular-Daten
+  onProgress: (progress: number) => void;
+  expectedFileExtension?: string; // z.B. '.bin'
+  fileExtensionErrorMessage?: string;
+}
 interface FileItem {
   name: string;
   size?: number;
@@ -36,6 +47,107 @@ interface SdCardModalProps {
   onClose: () => void;
   espIp?: string;
 }
+
+/**
+ * Generische Funktion zum Auswählen einer Datei und Hochladen auf den ESP.
+ */
+const uploadFileWithPickerBase = async (
+  options: UploadFileOptions
+): Promise<{ success: boolean; message: string }> => {
+  const {
+    espIp,
+    endpoint,
+    fileTypeFilter = '*/*',
+    fileFieldName,
+    additionalFormData = {},
+    onProgress,
+    expectedFileExtension,
+    fileExtensionErrorMessage
+  } = options;
+
+  console.log('[uploadFileWithPickerBase] Called. Options:', JSON.stringify(options, null, 2));
+  if (!espIp) {
+    return { success: false, message: 'ESP IP-Adresse ist nicht bekannt.' };
+  }
+
+  try {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: fileTypeFilter,
+      copyToCacheDirectory: true,
+    });
+    console.log('[uploadFileWithPickerBase] DocumentPicker result:', JSON.stringify(result, null, 2));
+
+    if (result.canceled || !result.assets || result.assets.length === 0) {
+      return { success: false, message: 'Keine Datei ausgewählt.' };
+    }
+
+
+    const fileAsset = result.assets[0];
+    const fileUri = fileAsset.uri;
+
+    if (expectedFileExtension && !fileAsset.name.toLowerCase().endsWith(expectedFileExtension.toLowerCase())) {
+      return { success: false, message: fileExtensionErrorMessage || `Bitte wählen Sie eine ${expectedFileExtension}-Datei.` };
+    }
+
+    const uploadUrl = `http://${espIp}:80${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;
+
+    console.log(`[uploadFileWithPickerBase] Attempting to upload. URL: ${uploadUrl}, File URI: ${fileUri}, FieldName: ${fileFieldName}, Params: ${JSON.stringify(additionalFormData)}`);
+    const uploadResult = await FileSystem.uploadAsync(uploadUrl, fileUri, {
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: fileFieldName,
+      parameters: additionalFormData,
+      onUploadProgress: (event: FileSystem.UploadProgressData) => {
+        console.log('FileSystem.uploadAsync onUploadProgress event:', event); // DEBUG
+        if (event.totalBytesExpectedToSend > 0) {
+          const progress = event.totalBytesSent / event.totalBytesExpectedToSend;
+          console.log('Calculated progress (0-1):', progress); // DEBUG
+          onProgress(progress); // Rufe die übergebene onProgress-Callback auf
+        } else {
+          console.warn('FileSystem.uploadAsync onUploadProgress: totalBytesExpectedToSend is not > 0. Event:', event); // DEBUG
+        }
+      },
+    });
+    // onProgress(1); // Nicht mehr nötig, da der letzte onUploadProgress-Event dies abdeckt oder der Upload abgeschlossen ist.
+    console.log('[uploadFileWithPickerBase] FileSystem.uploadAsync promise resolved. Server Response Status:', uploadResult.status, 'Body:', uploadResult.body);
+
+    if (uploadResult.status >= 200 && uploadResult.status < 300) {
+      onProgress(1); // Stelle sicher, dass der Fortschritt bei Erfolg auf 100% ist
+      return { success: true, message: `Datei '${fileAsset.name}' erfolgreich hochgeladen. Server: ${uploadResult.body}` };
+    } else {
+      return { success: false, message: `Fehler vom Server (Status ${uploadResult.status}): ${uploadResult.body}` };
+    }
+  } catch (error: any) {
+    console.error(`[uploadFileWithPickerBase] CRITICAL EXCEPTION during upload to ${endpoint}. Error message: ${error.message}. Full error:`, error);
+    onProgress(0); // Setze Fortschritt bei Fehler zurück
+    return { success: false, message: `Fehler beim Upload: ${error.message}` };
+  }
+};
+
+/**
+ * Ermöglicht das Auswählen einer beliebigen Datei und das Hochladen auf die SD-Karte des ESP32.
+ */
+export const uploadGenericFileToEspSDCard = async (
+  espIp: string,
+  onProgress: (progress: number) => void,
+  destinationPath: string = '/' // Standardmäßig ins Root-Verzeichnis der SD-Karte
+): Promise<{ success: boolean; message: string }> => {
+  console.log("sdkfjhljfhldskajhf");
+  const additionalFormData: { [key: string]: string } = {};
+  if (destinationPath) {
+    // Der ESP-Endpunkt muss dieses Feld 'path' erwarten, um die Datei im richtigen Verzeichnis zu speichern.
+    additionalFormData.path = destinationPath;
+  }
+
+  return uploadFileWithPickerBase({
+    espIp,
+    endpoint: '/upload-multipart-sd', // Neuer, dedizierter Endpunkt für Multipart-Uploads
+    fileTypeFilter: '*/*', // Erlaube alle Dateitypen
+    fileFieldName: 'file', // Angepasst an den Feldnamen, den uploadSelectedFile verwendet
+    additionalFormData,
+    onProgress,
+  });
+};
 
 const SdCardModal: React.FC<SdCardModalProps> = ({ isVisible, onClose, espIp }) => {
   
@@ -204,6 +316,23 @@ const SdCardModal: React.FC<SdCardModalProps> = ({ isVisible, onClose, espIp }) 
     }
   };
 
+  // Funktion zur Bestätigung und zum Löschen einer Datei
+  const confirmAndDeleteFile = (filename: string) => {
+    Alert.alert(
+      "Datei löschen",
+      `Soll die Datei '${filename}' wirklich gelöscht werden?`,
+      [
+        {
+          text: "Abbrechen",
+          style: "cancel"
+        },
+        { text: "Löschen", onPress: () => deleteFile(filename) }
+      ],
+      { cancelable: true }
+    );
+  };
+
+
   const createFolder = async () => {
     let path = currentPath === '/' ? currentPath : currentPath + '/';
     try {
@@ -360,6 +489,8 @@ const SdCardModal: React.FC<SdCardModalProps> = ({ isVisible, onClose, espIp }) 
       }
     };
 
+// Diese Funktion muss auf der obersten Ebene der Datei stehen, nicht innerhalb der SdCardModal Komponente.
+
 
   return (
     <Modal visible={isVisible} onRequestClose={onClose} animationType="slide">
@@ -386,7 +517,7 @@ const SdCardModal: React.FC<SdCardModalProps> = ({ isVisible, onClose, espIp }) 
                   <Text style={item.type === 'folder' ? styles.folderName : styles.fileName}>{item.name}</Text>
                   {item.type === 'file' && <Text>({item.size} bytes)</Text>}
                   {item.type === 'file' && (
-                    <TouchableOpacity onPress={() => deleteFile(item.name)}>
+                    <TouchableOpacity onPress={() => confirmAndDeleteFile(item.name)}>
                       <Text style={styles.deleteButton}>Delete</Text>
                     </TouchableOpacity>
                   )}
@@ -469,6 +600,93 @@ const SdCardModal: React.FC<SdCardModalProps> = ({ isVisible, onClose, espIp }) 
     );
   };
   
+
+export const performOTAUpdate = async (
+  espIp: string,
+  onProgress: (progress: number) => void // Callback für Fortschritt (0-100)
+): Promise<{ success: boolean; message: string }> => {
+  if (!espIp) {
+    return { success: false, message: 'ESP IP-Adresse ist nicht bekannt.' };
+  }
+
+  try {
+    // 1. Datei auswählen
+    const result = await DocumentPicker.getDocumentAsync({
+      type: 'application/octet-stream', // Akzeptiert .bin Dateien
+      copyToCacheDirectory: true,
+    });
+
+    if (result.canceled || !result.assets || result.assets.length === 0) {
+      onProgress(0);
+      return { success: false, message: 'Keine Datei ausgewählt.' };
+    }
+
+    const fileAsset = result.assets[0];
+    const fileUri = fileAsset.uri;
+
+    if (!fileAsset.name.toLowerCase().endsWith('.bin')) {
+      onProgress(0);
+      return { success: false, message: 'Bitte wählen Sie eine .bin Datei für das Firmware-Update.' };
+    }
+
+    // 2. Upload durchführen
+    const uploadUrl = `http://${espIp}/update`; // Port 80 ist Standard für HTTP
+
+    // Initialisiere den Fortschritt
+    onProgress(0);
+
+    const uploadResult = await FileSystem.uploadAsync(uploadUrl, fileUri, {
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        // 'Accept': 'text/plain', // Optional, um dem Server mitzuteilen, was wir erwarten
+      },
+      // fieldName: 'update', // Bei BINARY_CONTENT nicht unbedingt nötig, da der gesamte Body die Datei ist.
+                              // Der ESPAsyncWebServer für /update erwartet den Stream im Body.
+      sessionType: FileSystem.FileSystemSessionType.BACKGROUND, // Optional
+      // Fortschrittsberichterstattung für Expo SDK 49+
+      // Die Genauigkeit hängt davon ab, wie FileSystem.uploadAsync die Events bereitstellt.
+      // Der ESP32 sendet keine Zwischen-Feedbacks während des Schreibens der Chunks.
+      // Der Fortschritt hier spiegelt den Upload-Fortschritt von der App zum Server wider.
+      onUploadProgress: (event: FileSystem.UploadProgressData) => {
+        if (event.totalBytesExpectedToSend > 0) {
+          const progressPercentage = Math.round(
+            (event.totalBytesSent / event.totalBytesExpectedToSend) * 100
+          );
+          onProgress(progressPercentage);
+        }
+      },
+    });
+
+    // Nachdem der Upload abgeschlossen ist (oder fehlgeschlagen), setzen wir den Fortschritt auf 100%,
+    // da der ESP32 die Datei nun vollständig erhalten hat und verarbeitet.
+    onProgress(100);
+
+    // Auswertung der Server-Antwort
+    // Ihr ESP32-Server sendet:
+    // - 200 OK mit "Update erfolgreich!"
+    // - 500 Internal Server Error mit "Update fehlgeschlagen!"
+    if (uploadResult.status === 200 && uploadResult.body.includes("Update erfolgreich")) {
+      return { success: true, message: 'Firmware-Update erfolgreich zum ESP32 hochgeladen. Das Gerät startet neu.' };
+    } else {
+      console.error('OTA Update Fehler vom Server:', uploadResult.body, 'Status:', uploadResult.status);
+      const serverMessage = uploadResult.body || 'Keine detaillierte Fehlermeldung vom Server.';
+      return { success: false, message: `Fehler vom ESP32: ${serverMessage} (Status: ${uploadResult.status})` };
+    }
+
+  } catch (error: any) {
+    onProgress(0); // Setze Fortschritt zurück bei Fehler
+    console.error('OTA Update Fehler:', error);
+    let detailedMessage = error.message;
+    if (error.code === 'ERR_NETWORK') {
+        detailedMessage = 'Netzwerkfehler. Stellen Sie sicher, dass der ESP32 erreichbar ist und die IP-Adresse korrekt ist.';
+    }
+    return { success: false, message: `Fehler beim OTA-Update: ${detailedMessage}` };
+  }
+};
+
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,

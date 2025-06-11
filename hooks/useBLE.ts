@@ -26,6 +26,12 @@ const DATA_SERVICE_UUID = "243c24bf-6615-461d-8cda-68d38b90b9b6";
 const CHARACTERISTIC_UUID_NOTIFY = "d6e3ae85-8366-4508-8136-71d12dbf8955";
 const CHARACTERISTIC_UUID_DATA = "869abea9-ea1f-40c6-a8a4-7f7861076456";
 
+export type info = "info";
+export type error = "error";
+export type verbose = "verbose";
+export type debug = "debug";
+export type debugLogType = {type: info | error | verbose | debug, data: string} | null;
+
 export type bleCallback = {
   oneTime: boolean;
   
@@ -38,7 +44,7 @@ let revieceCallbacks: (bleCallback & { id: string})[] = [];
 export default function useBLE(): BLEContextProps {
   const [allDevices, setAllDevices] = useState<Device[]>([]);
   const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
-  
+  const [logData, setLogData] = useState<debugLogType>(null);
   const [receivedData, setReceivedData] = useState<{type: Communication.BLE_COMMANDS, data: any}>({type: Communication.BLE_COMMANDS.ERROR_MESSAGE, data: null});
   
 
@@ -238,20 +244,22 @@ export default function useBLE(): BLEContextProps {
             
             case Communication.BLE_COMMANDS.LOG_DATA:
               console.log(msgPack.decode(data));
+              setLogData(msgPack.decode(data) as debugLogType);
               break;
               
 
             default:
-              decodedData = msgPack.decode(data);
-              if(decodedData.Call_ID !== undefined) {
-                tryCallbacks(decodedData.Call_ID, decodedData);
-                break;
-              }
+              
               console.log('Recived BLECommand not implemented');
               console.log(`${checksum} vs ${recievePackage.current.checksum}`);
               console.log(msgPack.decode(data));
               console.log(recievePackage.current);
               break;
+          }
+          decodedData = msgPack.decode(data);
+          if(decodedData.Call_ID !== undefined) {
+            tryCallbacks(decodedData.Call_ID, decodedData);
+            
           }
           // if(recievePackage.current.type === Communication.BLE_COMMANDS.GET_SD_FILESYSTEM) {
           //   const decodedData = msgPack.decode(data);
@@ -498,6 +506,7 @@ export default function useBLE(): BLEContextProps {
     connectedDevice,
     receivedData,
     notiviedData,
+    logData,
     registerCallback,
     requestPermissions,
     scanForPeripherals,

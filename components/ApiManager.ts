@@ -47,6 +47,7 @@ class ApiManager {
       // throw new Error("IP address cannot be changed after ApiManager has been initialized.");
       console.log(`change IP from ${ApiManager.instance.ip} to ${ip}}`);
       ApiManager.instance.ip = ip;
+      ApiManager.instance.axiosInstance.defaults.baseURL = `http://${ip}:80`;
     }
     return ApiManager.instance;
   }

@@ -1,6 +1,7 @@
 import React, { createContext, useContext } from 'react';
-import useBLE, { bleCallback } from '@/hooks/useBLE'; // Importiere useBLE aus deinem Hook-Verzeichnis
+import useBLE, { bleCallback, debugLogType } from '@/hooks/useBLE'; // Importiere useBLE aus deinem Hook-Verzeichnis
 import { Communication } from '@/constants/bleTypes';
+
 
 // Erstelle den BLE-Kontext
 export interface BLEContextProps {
@@ -13,6 +14,7 @@ export interface BLEContextProps {
   receivedData: any;
   registerCallback: (callback: bleCallback & {id: string})=> void,
   notiviedData: any;
+  logData: debugLogType;
   requestPermissions: () => Promise<boolean>;
   scanForPeripherals: () => void;
 }
