@@ -63,6 +63,7 @@ export default function TabOneScreen() {
    */
   const [isOtaUploading, setIsOtaUploading] = useState<boolean>(false);
   const [otaUploadProgress, setOtaUploadProgress] = useState<number>(0);
+  const [isPlateScanActive, setIsPlateScanActive] = useState<boolean>(false); // Neuer State für PlateScan
   /**
    * Requests Bluetooth permissions and scans for nearby BLE devices
    */
@@ -265,6 +266,18 @@ export default function TabOneScreen() {
       ]
     );
   };
+  const togglePlateScan = () => {
+    const newState = !isPlateScanActive;
+    sendCommand(
+      Communication.BLE_COMMANDS.INPTERRUPT_VOLTPORTS, 
+      { setInterrupt: newState }, 
+      { oneTime: true, func: (data) => {
+        console.log("PlateScan command response:", data);
+        setIsPlateScanActive(data.getInterrupt);
+        setIsPlateScanActive(newState); // Zustand nach erfolgreichem Senden aktualisieren
+      }, type: Communication.BLE_COMMANDS.INPTERRUPT_VOLTPORTS }
+    );
+  };
   const clearDebugLog = () => {
     setDebugLog([]);
   };
@@ -286,6 +299,7 @@ export default function TabOneScreen() {
             <Button title="Disconnect" onPress={disconnectDevice} />
             <Button title="Connect to WLAN" onPress={() => setIsWLANVisible(true)} />
             <Button title="Clear User Credentials" onPress={confirmClearUserCredentials} />
+            <Button title={isPlateScanActive ? "Turn off PlateScan" : "Turn on PlateScan"} onPress={togglePlateScan} />
             <Button title="SD Card Directories" onPress={openSDCardFilesModal} />
             <Button title="Websocket SD Card" onPress={openWebSdCard} disabled={!espIpForOta}/>
             <Button

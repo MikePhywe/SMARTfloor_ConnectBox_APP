@@ -16,6 +16,7 @@ export namespace Communication {
     FIRMWARE_UPDATE = 11,
     SET_VOLTAGE_PORT = 12,
     LOG_DATA = 13,
+    INPTERRUPT_VOLTPORTS = 14,
     ERROR_MESSAGE = 255,
   }
 
